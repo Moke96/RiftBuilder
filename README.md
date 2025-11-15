@@ -2,6 +2,10 @@
 
 Piltover Archive companion toolchain that will scrape the "Most Viewed" decks, parse their exported card lists, and compare them with your personal collection.
 
+> **Disclaimer**
+>
+> RiftBuilder is an independent, community-built utility. It is not affiliated with, endorsed by, or supported by Piltover Archive, CardNexus, Riot Games, or any related publishers. Use the scrapers only for personal data portability, respect each platform’s Terms of Service, and do not redistribute their proprietary data without their permission.
+
 ## Prerequisites
 
 - Node.js 20+
