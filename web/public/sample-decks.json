@@ -1,0 +1,43 @@
+[
+  {
+    "slug": "sample",
+    "label": "Sample Deck",
+    "url": "https://universe.leagueoflegends.com/sample",
+    "exportText": "1 Kai'Sa, Daughter of the Void\n\n2 Kai'Sa, Survivor\n\n3 Stupefy\n3 Cleave\n3 Hextech Ray\n3 Retreat\n1 Pouty Poro\n3 Ravenbloom Student\n3 Falling Star\n3 Watchful Sentry\n3 Lecturing Yordle\n3 Noxus Hopeful\n3 Darius, Trifarian\n3 Thousand-Tailed Watcher\n2 Icathian Rain\n2 Time Warp\n\n1 Grove of the God-Willow\n1 The Dreaming Tree\n1 Startipped Peak\n\n7 Fury Rune\n5 Mind Rune\n\n2 Smoke Screen\n2 Void Seeker\n2 Thermo Beam\n1 Progress Day\n1 Mega-Mech\n",
+    "parsed": {
+      "main": [
+        { "count": 1, "name": "Kai'Sa, Daughter of the Void" },
+        { "count": 2, "name": "Kai'Sa, Survivor" },
+        { "count": 3, "name": "Stupefy" },
+        { "count": 3, "name": "Cleave" },
+        { "count": 3, "name": "Hextech Ray" },
+        { "count": 3, "name": "Retreat" },
+        { "count": 1, "name": "Pouty Poro" },
+        { "count": 3, "name": "Ravenbloom Student" },
+        { "count": 3, "name": "Falling Star" },
+        { "count": 3, "name": "Watchful Sentry" },
+        { "count": 3, "name": "Lecturing Yordle" },
+        { "count": 3, "name": "Noxus Hopeful" },
+        { "count": 3, "name": "Darius, Trifarian" },
+        { "count": 3, "name": "Thousand-Tailed Watcher" },
+        { "count": 2, "name": "Icathian Rain" },
+        { "count": 2, "name": "Time Warp" },
+        { "count": 2, "name": "Smoke Screen" },
+        { "count": 2, "name": "Void Seeker" },
+        { "count": 2, "name": "Thermo Beam" },
+        { "count": 1, "name": "Progress Day" },
+        { "count": 1, "name": "Mega-Mech" }
+      ],
+      "battlefields": [
+        { "count": 1, "name": "Grove of the God-Willow" },
+        { "count": 1, "name": "The Dreaming Tree" },
+        { "count": 1, "name": "Startipped Peak" }
+      ],
+      "runes": [
+        { "count": 7, "name": "Fury Rune" },
+        { "count": 5, "name": "Mind Rune" }
+      ],
+      "sideboard": []
+    }
+  }
+]
