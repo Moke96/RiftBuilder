@@ -8,7 +8,12 @@ export type MissingCard = {
   required: number;
   owned: number;
   missing: number;
+  bucket: DeckBucket;
 };
+
+export type DeckBucket = keyof DeckExport;
+
+type RequirementEntry = CardEntry & { bucket: DeckBucket };
 
 export type ComparisonStatus = "buildable" | "close" | "unbuildable";
 
@@ -72,7 +77,8 @@ export function compareDeck(
         name: card.name,
         required: card.count,
         owned,
-        missing: deficit
+        missing: deficit,
+        bucket: card.bucket
       });
     }
   }
@@ -91,8 +97,9 @@ export function compareDecks(
   return decks.map((deck) => compareDeck(deck, inventory, maxMissing));
 }
 
-export function collectDeckRequirements(deck: DeckExport): CardEntry[] {
-  return [...deck.main, ...deck.battlefields, ...deck.runes, ...deck.sideboard];
+export function collectDeckRequirements(deck: DeckExport): RequirementEntry[] {
+  const order: DeckBucket[] = ["main", "battlefields", "runes", "sideboard"];
+  return order.flatMap((bucket) => deck[bucket].map((card) => ({ ...card, bucket })));
 }
 
 function ensureParsed(deck: PersistedDeck): PersistedDeck & { parsed: DeckExport } {

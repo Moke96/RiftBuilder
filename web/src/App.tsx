@@ -16,6 +16,7 @@ import { getCardArtMeta, type CardArtLookup } from "@app/lib/cardArt";
 
 type StatusFilter = "all" | ComparisonStatus;
 type SortOrder = "default" | "missing-asc" | "missing-desc";
+type MissingBucket = DeckComparison["missingCards"][number]["bucket"];
 
 const statusFilters: Array<{ label: string; value: StatusFilter }> = [
   { label: "All", value: "all" },
@@ -23,6 +24,14 @@ const statusFilters: Array<{ label: string; value: StatusFilter }> = [
   { label: "Close", value: "close" },
   { label: "Unbuildable", value: "unbuildable" }
 ];
+
+const missingBucketOrder: MissingBucket[] = ["main", "battlefields", "runes", "sideboard"];
+const missingBucketLabels: Record<MissingBucket, string> = {
+  main: "Main deck",
+  battlefields: "Battlefields",
+  runes: "Runes",
+  sideboard: "Sideboard"
+};
 
 const sortOptions: Array<{ label: string; value: SortOrder }> = [
   { label: "Original order", value: "default" },
@@ -387,15 +396,25 @@ function DeckSelectionPanel({
   );
 }
 
+type MissingCardEntry = DeckComparison["missingCards"][number];
+
 function DeckDetails({ entry, getCardMeta }: { entry: DeckComparison; getCardMeta: CardArtLookup }) {
   const totalMain = entry.deck.parsed.main.reduce((sum, card) => sum + card.count, 0);
-  const [focusedCard, setFocusedCard] = useState<string | null>(entry.missingCards[0]?.name ?? null);
+  const [focusedCard, setFocusedCard] = useState<{ name: string; bucket: MissingBucket } | null>(
+    entry.missingCards[0] ? { name: entry.missingCards[0].name, bucket: entry.missingCards[0].bucket } : null
+  );
 
   useEffect(() => {
-    setFocusedCard(entry.missingCards[0]?.name ?? null);
+    setFocusedCard(entry.missingCards[0] ? { name: entry.missingCards[0].name, bucket: entry.missingCards[0].bucket } : null);
   }, [entry]);
 
-  const focusedMeta = focusedCard ? getCardMeta(focusedCard) : null;
+  const focusedMeta = focusedCard ? getCardMeta(focusedCard.name) : null;
+  const groupedMissing = useMemo(() => {
+    return entry.missingCards.reduce((acc, card) => {
+      (acc[card.bucket] ??= []).push(card);
+      return acc;
+    }, {} as Partial<Record<MissingBucket, MissingCardEntry[]>>);
+  }, [entry]);
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -423,46 +442,59 @@ function DeckDetails({ entry, getCardMeta }: { entry: DeckComparison; getCardMet
         ) : (
           <div className="mt-3 grid gap-4 md:grid-cols-[minmax(0,1fr)_20rem]">
             <div className="max-h-[30rem] overflow-y-auto pr-3">
-              <ul className="flex flex-col gap-2">
-                {entry.missingCards.map((card) => {
-                  const meta = getCardMeta(card.name);
-                  const artUrl = meta?.imageUrl ?? null;
-                  const descriptor = [meta?.setName, meta?.rarity].filter(Boolean).join(" · ");
-                  const domainLabel = meta?.domains?.join(" • ");
-                  const isFocused = focusedCard === card.name;
+              <div className="flex flex-col gap-4">
+                {missingBucketOrder.map((bucket) => {
+                  const cards = groupedMissing[bucket];
+                  if (!cards?.length) {
+                    return null;
+                  }
                   return (
-                    <li
-                      key={card.name}
-                      className={clsx(
-                        "flex gap-3 rounded-2xl border px-3 py-2 text-sm text-white/80 transition",
-                        isFocused ? "border-accent/60 bg-accent/5" : "border-white/10 bg-white/5 hover:border-accent/40"
-                      )}
-                      onMouseEnter={() => setFocusedCard(card.name)}
-                      onFocus={() => setFocusedCard(card.name)}
-                      tabIndex={0}
-                    >
-                      <div className="h-16 w-12 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-slate-900/40">
-                        {artUrl ? (
-                          <img src={artUrl} alt={card.name} className="h-full w-full object-cover" loading="lazy" />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center text-[10px] text-white/40">No art</div>
-                        )}
-                      </div>
-                      <div className="flex flex-1 flex-col">
-                        <div className="flex items-center justify-between">
-                          <span>{card.name}</span>
-                          <span className="text-xs text-slate-400">
-                            {card.owned}/{card.required}
-                          </span>
-                        </div>
-                        {descriptor ? <p className="text-xs text-slate-400">{descriptor}</p> : null}
-                        {domainLabel ? <p className="text-[11px] text-slate-500">{domainLabel}</p> : null}
-                        <p className="text-xs text-amber-200">Missing {card.missing}</p>
-                      </div>
-                    </li>
+                    <div key={bucket}>
+                      <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">{missingBucketLabels[bucket]}</p>
+                      <ul className="mt-2 flex flex-col gap-2">
+                        {cards.map((card) => {
+                          const meta = getCardMeta(card.name);
+                          const artUrl = meta?.imageUrl ?? null;
+                          const descriptor = [meta?.setName, meta?.rarity].filter(Boolean).join(" · ");
+                          const domainLabel = meta?.domains?.join(" • ");
+                          const isFocused = focusedCard?.name === card.name && focusedCard?.bucket === card.bucket;
+                          return (
+                            <li
+                              key={`${card.name}-${card.bucket}`}
+                              className={clsx(
+                                "flex gap-3 rounded-2xl border px-3 py-2 text-sm text-white/80 transition",
+                                isFocused ? "border-accent/60 bg-accent/5" : "border-white/10 bg-white/5 hover:border-accent/40"
+                              )}
+                              onMouseEnter={() => setFocusedCard({ name: card.name, bucket: card.bucket })}
+                              onFocus={() => setFocusedCard({ name: card.name, bucket: card.bucket })}
+                              tabIndex={0}
+                            >
+                              <div className="h-16 w-12 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-slate-900/40">
+                                {artUrl ? (
+                                  <img src={artUrl} alt={card.name} className="h-full w-full object-cover" loading="lazy" />
+                                ) : (
+                                  <div className="flex h-full w-full items-center justify-center text-[10px] text-white/40">No art</div>
+                                )}
+                              </div>
+                              <div className="flex flex-1 flex-col">
+                                <div className="flex items-center justify-between">
+                                  <span>{card.name}</span>
+                                  <span className="text-xs text-slate-400">
+                                    {card.owned}/{card.required}
+                                  </span>
+                                </div>
+                                {descriptor ? <p className="text-xs text-slate-400">{descriptor}</p> : null}
+                                {domainLabel ? <p className="text-[11px] text-slate-500">{domainLabel}</p> : null}
+                                <p className="text-xs text-amber-200">Missing {card.missing}</p>
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
                   );
                 })}
-              </ul>
+              </div>
             </div>
             <div className="rounded-3xl border border-white/10 bg-slate-900/60 p-4">
               {focusedCard && focusedMeta ? (
@@ -470,13 +502,13 @@ function DeckDetails({ entry, getCardMeta }: { entry: DeckComparison; getCardMet
                   <div className="w-full rounded-2xl border border-white/10 bg-slate-950/60 p-3">
                     <img
                       src={focusedMeta.imageUrl ?? undefined}
-                      alt={focusedCard}
+                      alt={focusedCard.name}
                       className="mx-auto h-[22rem] max-h-[22rem] rounded-2xl object-cover"
                       loading="lazy"
                     />
                   </div>
                   <div>
-                    <p className="text-lg font-semibold text-white">{focusedCard}</p>
+                    <p className="text-lg font-semibold text-white">{focusedCard.name}</p>
                     <p className="text-sm text-slate-400">
                       {[focusedMeta.setName, focusedMeta.rarity].filter(Boolean).join(" · ") || "Set info unavailable"}
                     </p>
