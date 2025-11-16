@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
 import { ArrowUpDown, ChevronRight, Search, SlidersHorizontal } from "lucide-react";
 import type { PersistedDeck } from "@shared/lib/types";
@@ -12,6 +12,7 @@ import {
 import { StatusBadge } from "@app/components/StatusBadge";
 import { SummaryCard } from "@app/components/SummaryCard";
 import { DataCard } from "@app/components/DataCard";
+import { getCardArtMeta, type CardArtLookup } from "@app/lib/cardArt";
 
 type StatusFilter = "all" | ComparisonStatus;
 type SortOrder = "default" | "missing-asc" | "missing-desc";
@@ -42,6 +43,7 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [selection, setSelection] = useState<DeckComparison | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
+  const getCardMeta = useCallback<CardArtLookup>((name) => getCardArtMeta(name), []);
 
   const comparisonState = useMemo<{
     data: DeckComparison[];
@@ -179,7 +181,7 @@ export default function App() {
               Load sample data
             </button>
             <a
-              href="https://github.com/mauri/RiftBuilder"
+              href="https://github.com/moke96/RiftBuilder"
               target="_blank"
               rel="noreferrer"
               className="rounded-full border border-white/20 px-5 py-2 text-sm font-semibold text-white/80 transition hover:border-white/40"
@@ -295,45 +297,18 @@ export default function App() {
             </div>
           </div>
 
-          <div className="mt-6 grid gap-6 lg:grid-cols-2">
-            <div className="space-y-3">
-              {!ready ? (
-                <p className="rounded-2xl border border-dashed border-white/10 bg-slate-900/50 p-6 text-center text-slate-400">
-                  Load decks and inventory to see the analysis.
-                </p>
-              ) : filtered.length === 0 ? (
-                <p className="rounded-2xl border border-dashed border-white/10 bg-slate-900/50 p-6 text-center text-slate-400">
-                  No decks match the current filter.
-                </p>
-              ) : (
-                filtered.map((entry) => (
-                  <button
-                    key={entry.deck.slug}
-                    className={clsx(
-                      "group flex w-full items-center justify-between gap-4 rounded-2xl border px-4 py-3 text-left transition",
-                      selection?.deck.slug === entry.deck.slug
-                        ? "border-accent/70 bg-accent/5"
-                        : "border-white/10 hover:border-accent/40 hover:bg-accent/5"
-                    )}
-                    onClick={() => setSelection(entry)}
-                  >
-                    <div>
-                      <p className="text-lg font-semibold text-white">{entry.deck.label}</p>
-                      <p className="text-sm text-slate-400">{entry.totalMissing === 0 ? "Ready to craft" : `${entry.totalMissing} missing copies`}</p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <StatusBadge status={entry.status} />
-                      <ChevronRight className="h-5 w-5 text-white/40 transition group-hover:translate-x-1" />
-                    </div>
-                  </button>
-                ))
-              )}
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-slate-900/40 p-5">
+          <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.8fr)] lg:items-start">
+            <DeckSelectionPanel
+              ready={ready}
+              filtered={filtered}
+              selection={selection}
+              setSelection={setSelection}
+            />
+            <div className="min-h-[55rem] rounded-2xl border border-white/10 bg-slate-900/50 p-5">
               {selection ? (
-                <DeckDetails entry={selection} />
+                <DeckDetails entry={selection} getCardMeta={getCardMeta} />
               ) : (
-                <p className="text-center text-slate-400">Select a deck to inspect requirements.</p>
+                <p className="text-center text-slate-400">Pick a deck to inspect the full breakdown.</p>
               )}
             </div>
           </div>
@@ -343,15 +318,91 @@ export default function App() {
   );
 }
 
-function DeckDetails({ entry }: { entry: DeckComparison }) {
+function DeckSelectionPanel({
+  ready,
+  filtered,
+  selection,
+  setSelection
+}: {
+  ready: boolean;
+  filtered: DeckComparison[];
+  selection: DeckComparison | null;
+  setSelection: (entry: DeckComparison | null) => void;
+}) {
+  const containerClass = "flex min-h-[20rem] flex-col gap-4 overflow-hidden rounded-2xl border border-white/10 bg-slate-900/60 p-4 lg:h-[55rem]";
+
+  if (!ready) {
+    return (
+      <div className={clsx(containerClass, "items-center justify-center text-center text-slate-400") }>
+        Load decks and inventory to see the analysis.
+      </div>
+    );
+  }
+
+  if (filtered.length === 0) {
+    return (
+      <div className={clsx(containerClass, "items-center justify-center text-center text-slate-400") }>
+        No decks match the current filter.
+      </div>
+    );
+  }
+
+  return (
+    <div className={containerClass}>
+      <div className="flex items-center justify-between text-xs uppercase tracking-[0.3em] text-slate-400">
+        <span>Deck pool</span>
+        <span>{filtered.length} entries</span>
+      </div>
+      <div className="flex-1 min-h-0 space-y-3 overflow-y-auto pr-1">
+        {filtered.map((entry) => (
+          <button
+            key={entry.deck.slug}
+            className={clsx(
+              "group flex w-full items-center justify-between gap-4 rounded-2xl border bg-slate-950/40 px-4 py-4 text-left transition",
+              selection?.deck.slug === entry.deck.slug
+                ? "border-accent/70 bg-accent/10 shadow-lg shadow-accent/10"
+                : "border-white/10 hover:border-accent/40 hover:bg-slate-950/70"
+            )}
+            onClick={() => setSelection(entry)}
+          >
+            <div className="space-y-2">
+              <p className="text-lg font-semibold text-white">{entry.deck.label}</p>
+              <div className="flex flex-wrap gap-2 text-xs">
+                <span className="rounded-full border border-white/15 px-2 py-0.5 text-[0.7rem] tracking-wide text-slate-300">
+                  {entry.totalMissing === 0 ? "Ready to craft" : `${entry.totalMissing} missing copies`}
+                </span>
+                <span className="rounded-full border border-white/10 px-2 py-0.5 text-[0.7rem] tracking-wide text-slate-400">
+                  {entry.missingCards.length} cards short
+                </span>
+              </div>
+            </div>
+            <div className="flex flex-col items-end gap-2">
+              <StatusBadge status={entry.status} />
+              <ChevronRight className="h-5 w-5 text-white/40 transition group-hover:translate-x-1" />
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DeckDetails({ entry, getCardMeta }: { entry: DeckComparison; getCardMeta: CardArtLookup }) {
   const totalMain = entry.deck.parsed.main.reduce((sum, card) => sum + card.count, 0);
+  const [focusedCard, setFocusedCard] = useState<string | null>(entry.missingCards[0]?.name ?? null);
+
+  useEffect(() => {
+    setFocusedCard(entry.missingCards[0]?.name ?? null);
+  }, [entry]);
+
+  const focusedMeta = focusedCard ? getCardMeta(focusedCard) : null;
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm uppercase tracking-[0.3em] text-slate-400">Focused deck</p>
           <h3 className="text-2xl font-semibold text-white">{entry.deck.label}</h3>
-          <p className="text-sm text-slate-400">{entry.deck.url}</p>
+          <a className="text-sm text-slate-400" href={entry.deck.url} target="_blank" rel="noopener noreferrer">{entry.deck.url}</a>
         </div>
         <StatusBadge status={entry.status} />
       </div>
@@ -370,22 +421,77 @@ function DeckDetails({ entry }: { entry: DeckComparison }) {
             All requirements satisfied.
           </p>
         ) : (
-          <ul className="mt-3 flex max-h-64 flex-col gap-2 overflow-y-auto pr-1">
-            {entry.missingCards.map((card) => (
-              <li
-                key={card.name}
-                className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80"
-              >
-                <div className="flex items-center justify-between">
-                  <span>{card.name}</span>
-                  <span className="text-xs text-slate-400">
-                    {card.owned}/{card.required}
-                  </span>
+          <div className="mt-3 grid gap-4 md:grid-cols-[minmax(0,1fr)_20rem]">
+            <div className="max-h-[30rem] overflow-y-auto pr-3">
+              <ul className="flex flex-col gap-2">
+                {entry.missingCards.map((card) => {
+                  const meta = getCardMeta(card.name);
+                  const artUrl = meta?.imageUrl ?? null;
+                  const descriptor = [meta?.setName, meta?.rarity].filter(Boolean).join(" · ");
+                  const domainLabel = meta?.domains?.join(" • ");
+                  const isFocused = focusedCard === card.name;
+                  return (
+                    <li
+                      key={card.name}
+                      className={clsx(
+                        "flex gap-3 rounded-2xl border px-3 py-2 text-sm text-white/80 transition",
+                        isFocused ? "border-accent/60 bg-accent/5" : "border-white/10 bg-white/5 hover:border-accent/40"
+                      )}
+                      onMouseEnter={() => setFocusedCard(card.name)}
+                      onFocus={() => setFocusedCard(card.name)}
+                      tabIndex={0}
+                    >
+                      <div className="h-16 w-12 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-slate-900/40">
+                        {artUrl ? (
+                          <img src={artUrl} alt={card.name} className="h-full w-full object-cover" loading="lazy" />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-[10px] text-white/40">No art</div>
+                        )}
+                      </div>
+                      <div className="flex flex-1 flex-col">
+                        <div className="flex items-center justify-between">
+                          <span>{card.name}</span>
+                          <span className="text-xs text-slate-400">
+                            {card.owned}/{card.required}
+                          </span>
+                        </div>
+                        {descriptor ? <p className="text-xs text-slate-400">{descriptor}</p> : null}
+                        {domainLabel ? <p className="text-[11px] text-slate-500">{domainLabel}</p> : null}
+                        <p className="text-xs text-amber-200">Missing {card.missing}</p>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+            <div className="rounded-3xl border border-white/10 bg-slate-900/60 p-4">
+              {focusedCard && focusedMeta ? (
+                <div className="flex flex-col items-center gap-3 text-center">
+                  <div className="w-full rounded-2xl border border-white/10 bg-slate-950/60 p-3">
+                    <img
+                      src={focusedMeta.imageUrl ?? undefined}
+                      alt={focusedCard}
+                      className="mx-auto h-[22rem] max-h-[22rem] rounded-2xl object-cover"
+                      loading="lazy"
+                    />
+                  </div>
+                  <div>
+                    <p className="text-lg font-semibold text-white">{focusedCard}</p>
+                    <p className="text-sm text-slate-400">
+                      {[focusedMeta.setName, focusedMeta.rarity].filter(Boolean).join(" · ") || "Set info unavailable"}
+                    </p>
+                    {focusedMeta.domains?.length ? (
+                      <p className="text-xs uppercase tracking-[0.3em] text-slate-500">{focusedMeta.domains.join(" • ")}</p>
+                    ) : null}
+                  </div>
                 </div>
-                <p className="text-xs text-amber-200">Missing {card.missing}</p>
-              </li>
-            ))}
-          </ul>
+              ) : (
+                <div className="flex h-full items-center justify-center text-center text-sm text-slate-400">
+                  Hover a card to preview full art
+                </div>
+              )}
+            </div>
+          </div>
         )}
       </div>
     </div>
