@@ -33,6 +33,20 @@ const missingBucketLabels: Record<MissingBucket, string> = {
   sideboard: "Sideboard"
 };
 
+function formatMissingCardsForExport(entry: DeckComparison): string {
+  const sections = missingBucketOrder
+    .map((bucket) => {
+      const cards = entry.missingCards.filter((card) => card.bucket === bucket);
+      if (cards.length === 0) {
+        return null;
+      }
+      return cards.map((card) => `${card.missing} ${card.name}`).join("\n");
+    })
+    .filter((section): section is string => Boolean(section));
+
+  return sections.join("\n\n");
+}
+
 const sortOptions: Array<{ label: string; value: SortOrder }> = [
   { label: "Original order", value: "default" },
   { label: "Missing asc", value: "missing-asc" },
@@ -403,6 +417,7 @@ function DeckDetails({ entry, getCardMeta }: { entry: DeckComparison; getCardMet
   const [focusedCard, setFocusedCard] = useState<{ name: string; bucket: MissingBucket } | null>(
     entry.missingCards[0] ? { name: entry.missingCards[0].name, bucket: entry.missingCards[0].bucket } : null
   );
+  const [isExportOpen, setExportOpen] = useState(false);
 
   useEffect(() => {
     setFocusedCard(entry.missingCards[0] ? { name: entry.missingCards[0].name, bucket: entry.missingCards[0].bucket } : null);
@@ -415,9 +430,11 @@ function DeckDetails({ entry, getCardMeta }: { entry: DeckComparison; getCardMet
       return acc;
     }, {} as Partial<Record<MissingBucket, MissingCardEntry[]>>);
   }, [entry]);
+  const missingExportText = useMemo(() => formatMissingCardsForExport(entry), [entry]);
   return (
-    <div>
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <>
+      <div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm uppercase tracking-[0.3em] text-slate-400">Focused deck</p>
           <h3 className="text-2xl font-semibold text-white">{entry.deck.label}</h3>
@@ -426,15 +443,26 @@ function DeckDetails({ entry, getCardMeta }: { entry: DeckComparison; getCardMet
         <StatusBadge status={entry.status} />
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <MiniStat label="Main" value={`${totalMain} cards`} />
         <MiniStat label="Runes" value={entry.deck.parsed.runes.length} />
         <MiniStat label="Battlefields" value={entry.deck.parsed.battlefields.length} />
         <MiniStat label="Sideboard" value={entry.deck.parsed.sideboard.length} />
-      </div>
+        </div>
 
-      <div className="mt-6">
-        <p className="text-sm uppercase tracking-[0.3em] text-slate-400">Missing pieces</p>
+        <div className="mt-6">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm uppercase tracking-[0.3em] text-slate-400">Missing pieces</p>
+          {entry.missingCards.length ? (
+            <button
+              type="button"
+              className="rounded-full border border-white/20 px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-white/80 transition hover:border-white/40"
+              onClick={() => setExportOpen(true)}
+            >
+              Export list
+            </button>
+          ) : null}
+        </div>
         {entry.missingCards.length === 0 ? (
           <p className="mt-2 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
             All requirements satisfied.
@@ -525,8 +553,16 @@ function DeckDetails({ entry, getCardMeta }: { entry: DeckComparison; getCardMet
             </div>
           </div>
         )}
+        </div>
       </div>
-    </div>
+      {isExportOpen && entry.missingCards.length ? (
+        <MissingExportModal
+          text={missingExportText}
+          onClose={() => setExportOpen(false)}
+          deckLabel={entry.deck.label}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -535,6 +571,59 @@ function MiniStat({ label, value }: { label: string; value: string | number }) {
     <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
       <p className="text-xs uppercase tracking-[0.3em] text-slate-400">{label}</p>
       <p className="text-lg font-semibold text-white">{value}</p>
+    </div>
+  );
+}
+
+function MissingExportModal({ text, onClose, deckLabel }: { text: string; onClose: () => void; deckLabel: string }) {
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (error) {
+      setCopied(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-2xl rounded-3xl border border-white/10 bg-slate-900/90 p-6 shadow-2xl backdrop-blur"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Export</p>
+            <h4 className="text-xl font-semibold text-white">{deckLabel}</h4>
+          </div>
+          <button
+            type="button"
+            className="rounded-full border border-white/20 px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-white/80 transition hover:border-white/40"
+            onClick={onClose}
+          >
+            Close
+          </button>
+        </div>
+        <p className="mt-2 text-sm text-slate-400">Copy this block into Cardmarket’s import box.</p>
+        <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+          <pre className="max-h-[18rem] overflow-y-auto whitespace-pre-wrap text-sm text-slate-100">{text}</pre>
+        </div>
+        <div className="mt-4 flex justify-end">
+          <button
+            type="button"
+            className={clsx(
+              "rounded-full px-5 py-2 text-sm font-semibold text-slate-900",
+              copied ? "bg-emerald-400" : "bg-accent"
+            )}
+            onClick={handleCopy}
+          >
+            {copied ? "Copied" : "Copy to clipboard"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
