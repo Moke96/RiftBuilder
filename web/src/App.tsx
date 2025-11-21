@@ -9,6 +9,7 @@ import {
   type DeckComparison,
   type Inventory
 } from "@shared/lib/comparison";
+import { parseExportedDeck } from "@shared/lib/deckParser";
 import { StatusBadge } from "@app/components/StatusBadge";
 import { SummaryCard } from "@app/components/SummaryCard";
 import { DataCard } from "@app/components/DataCard";
@@ -65,6 +66,9 @@ export default function App() {
   const [sortOrder, setSortOrder] = useState<SortOrder>("default");
   const [search, setSearch] = useState("");
   const [selection, setSelection] = useState<DeckComparison | null>(null);
+  const [isInventoryOpen, setInventoryOpen] = useState(false);
+  const [isImportTextOpen, setImportTextOpen] = useState(false);
+  const [isDeckImportOpen, setDeckImportOpen] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
   const getCardMeta = useCallback<CardArtLookup>((name) => getCardArtMeta(name), []);
 
@@ -184,6 +188,57 @@ export default function App() {
     event.target.value = "";
   }
 
+  function handleInventoryTextImport(text: string) {
+    try {
+      const lines = text.split(/\r?\n/);
+      const parsed: Record<string, number> = {};
+      let countFound = 0;
+      
+      for (const line of lines) {
+        const match = line.match(/^\s*(\d+)x?\s+(.+)$/);
+        if (match) {
+          const count = parseInt(match[1], 10);
+          const name = match[2].trim();
+          if (name && !isNaN(count)) {
+            parsed[name] = (parsed[name] || 0) + count;
+            countFound++;
+          }
+        }
+      }
+
+      if (countFound === 0) {
+        throw new Error("No valid card entries found. Use format: '3x Card Name'");
+      }
+
+      const normalized = normalizeInventory(parsed);
+      setInventory(normalized);
+      setInventoryLabel("Imported from text");
+      setImportTextOpen(false);
+      setToast({ tone: "success", message: `Imported ${countFound} entries` });
+    } catch (error) {
+      setToast({ tone: "error", message: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
+  function handleDeckTextImport(name: string, text: string) {
+    try {
+      const parsed = parseExportedDeck(text);
+      const newDeck: PersistedDeck = {
+        slug: `custom-${Date.now()}`,
+        label: name,
+        url: "",
+        exportText: text,
+        parsed
+      };
+      setDecks((prev) => [...prev, newDeck]);
+      setDecksLabel((prev) => prev === "No deck file loaded yet" ? "Custom list" : "Mixed sources");
+      setDeckImportOpen(false);
+      setToast({ tone: "success", message: `Imported deck: ${name}` });
+    } catch (error) {
+      setToast({ tone: "error", message: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
   const ready = decks.length > 0 && Boolean(inventory);
 
   return (
@@ -239,6 +294,7 @@ export default function App() {
             isLoaded={decks.length > 0}
             onFileChange={handleDeckUpload}
             onSampleClick={loadSampleDecks}
+            onImportText={() => setDeckImportOpen(true)}
             adornment="deck"
             badge={decksLabel}
           />
@@ -250,6 +306,9 @@ export default function App() {
             isLoaded={Boolean(inventory)}
             onFileChange={handleInventoryUpload}
             onSampleClick={loadSampleInventory}
+            onImportText={() => setImportTextOpen(true)}
+            onView={() => setInventoryOpen(true)}
+            viewLabel="View list"
             adornment="inventory"
             badge={inventoryLabel}
           />
@@ -281,7 +340,7 @@ export default function App() {
               ))}
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <label className="flex items-center gap-2 rounded-full border border-white/10 px-3 py-2 text-sm text-white/70">
+              <label className="flex items-center gap-2 rounded-full border border-white/10 bg-slate-950/40 px-3 py-2 text-sm text-white/70">
                 <SlidersHorizontal className="h-4 w-4" />
                 <span>Max missing: {maxMissing}</span>
                 <input
@@ -293,7 +352,7 @@ export default function App() {
                   className="ml-2"
                 />
               </label>
-              <label className="flex items-center gap-2 rounded-full border border-white/10 px-3 py-2 text-sm text-white/70">
+              <label className="flex items-center gap-2 rounded-full border border-white/10 bg-slate-950/40 px-3 py-2 text-sm text-white/70">
                 <ArrowUpDown className="h-4 w-4" />
                 <select
                   value={sortOrder}
@@ -307,7 +366,7 @@ export default function App() {
                   ))}
                 </select>
               </label>
-              <label className="flex items-center gap-2 rounded-full border border-white/10 px-3 py-2 text-sm">
+              <label className="flex items-center gap-2 rounded-full border border-white/10 bg-slate-950/40 px-3 py-2 text-sm">
                 <Search className="h-4 w-4 text-white/50" />
                 <input
                   type="text"
@@ -337,6 +396,15 @@ export default function App() {
           </div>
         </section>
       </div>
+      {isInventoryOpen && inventory ? (
+        <InventoryModal inventory={inventory} onClose={() => setInventoryOpen(false)} />
+      ) : null}
+      {isImportTextOpen ? (
+        <TextImportModal onClose={() => setImportTextOpen(false)} onImport={handleInventoryTextImport} />
+      ) : null}
+      {isDeckImportOpen ? (
+        <DeckImportModal onClose={() => setDeckImportOpen(false)} onImport={handleDeckTextImport} />
+      ) : null}
     </div>
   );
 }
@@ -555,13 +623,13 @@ function DeckDetails({ entry, getCardMeta }: { entry: DeckComparison; getCardMet
         )}
         </div>
       </div>
-      {isExportOpen && entry.missingCards.length ? (
+      {isExportOpen && entry.missingCards.length > 0 && (
         <MissingExportModal
           text={missingExportText}
           onClose={() => setExportOpen(false)}
           deckLabel={entry.deck.label}
         />
-      ) : null}
+      )}
     </>
   );
 }
@@ -621,6 +689,193 @@ function MissingExportModal({ text, onClose, deckLabel }: { text: string; onClos
             onClick={handleCopy}
           >
             {copied ? "Copied" : "Copy to clipboard"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InventoryModal({ inventory, onClose }: { inventory: Inventory; onClose: () => void }) {
+  const [search, setSearch] = useState("");
+
+  const entries = useMemo(() => {
+    let data = Object.entries(inventory);
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      data = data.filter(([name]) => name.toLowerCase().includes(q));
+    }
+    return data.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  }, [inventory, search]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4" onClick={onClose}>
+      <div
+        className="flex h-full max-h-[45rem] w-full max-w-2xl flex-col rounded-3xl border border-white/10 bg-slate-900/90 p-6 shadow-2xl backdrop-blur"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Collection</p>
+            <h4 className="text-xl font-semibold text-white">Inventory ledger</h4>
+          </div>
+          <button
+            type="button"
+            className="rounded-full border border-white/20 px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-white/80 transition hover:border-white/40"
+            onClick={onClose}
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="mt-4">
+          <label className="flex items-center gap-2 rounded-full border border-white/10 bg-slate-950/40 px-3 py-2 text-sm">
+            <Search className="h-4 w-4 text-white/50" />
+            <input
+              type="text"
+              placeholder="Search cards..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full bg-transparent text-white outline-none placeholder:text-white/40"
+              autoFocus
+            />
+          </label>
+        </div>
+
+        <p className="mt-2 text-sm text-slate-400">
+          Showing {entries.length} cards.
+        </p>
+        <div className="mt-2 flex-1 overflow-y-auto rounded-2xl border border-white/10 bg-slate-950/60 p-2">
+          <ul className="flex flex-col gap-1">
+            {entries.map(([name, count]) => {
+              const meta = getCardArtMeta(name);
+              const artUrl = meta?.imageUrl;
+              return (
+                <li key={name} className="flex items-center gap-3 rounded-xl px-3 py-2 hover:bg-white/5">
+                  <div className="h-12 w-9 shrink-0 overflow-hidden rounded border border-white/10 bg-slate-900/40">
+                    {artUrl ? (
+                      <img src={artUrl} alt={name} className="h-full w-full object-cover" loading="lazy" />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-[8px] text-white/40">
+                        No art
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex flex-1 items-center justify-between">
+                    <span className="text-sm text-slate-200">{name}</span>
+                    <span className="rounded-full bg-slate-800 px-2 py-0.5 text-xs font-medium text-slate-400">
+                      {count}x
+                    </span>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TextImportModal({ onClose, onImport }: { onClose: () => void; onImport: (text: string) => void }) {
+  const [text, setText] = useState("");
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-2xl rounded-3xl border border-white/10 bg-slate-900/90 p-6 shadow-2xl backdrop-blur"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Import</p>
+            <h4 className="text-xl font-semibold text-white">Paste inventory</h4>
+          </div>
+          <button
+            type="button"
+            className="rounded-full border border-white/20 px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-white/80 transition hover:border-white/40"
+            onClick={onClose}
+          >
+            Close
+          </button>
+        </div>
+        <p className="mt-2 text-sm text-slate-400">
+          Paste your card list below. Format: <code>3x Card Name</code> or <code>1x Card Name</code>.
+        </p>
+        <textarea
+          className="mt-4 h-64 w-full rounded-2xl border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-200 outline-none focus:border-accent/50"
+          placeholder={`3x Kai'Sa, Survivor\n1x Falling Star\n...`}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          autoFocus
+        />
+        <div className="mt-4 flex justify-end">
+          <button
+            type="button"
+            className="rounded-full bg-accent px-5 py-2 text-sm font-semibold text-slate-900 transition hover:bg-accent/90"
+            onClick={() => onImport(text)}
+          >
+            Import cards
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DeckImportModal({ onClose, onImport }: { onClose: () => void; onImport: (name: string, text: string) => void }) {
+  const [name, setName] = useState("");
+  const [text, setText] = useState("");
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-2xl rounded-3xl border border-white/10 bg-slate-900/90 p-6 shadow-2xl backdrop-blur"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Import</p>
+            <h4 className="text-xl font-semibold text-white">Paste deck</h4>
+          </div>
+          <button
+            type="button"
+            className="rounded-full border border-white/20 px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-white/80 transition hover:border-white/40"
+            onClick={onClose}
+          >
+            Close
+          </button>
+        </div>
+        <div className="mt-4 space-y-4">
+          <div>
+            <label className="block text-xs uppercase tracking-wide text-slate-400 mb-1">Deck Name</label>
+            <input
+              type="text"
+              className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-2 text-sm text-slate-200 outline-none focus:border-accent/50"
+              placeholder="My Awesome Deck"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              autoFocus
+            />
+          </div>
+          <div>
+            <label className="block text-xs uppercase tracking-wide text-slate-400 mb-1">Deck List</label>
+            <textarea
+              className="h-64 w-full rounded-xl border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-200 outline-none focus:border-accent/50 font-mono"
+              placeholder={`1 Master Yi, Wuju Bladesman\n...`}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+            />
+          </div>
+        </div>
+        <div className="mt-4 flex justify-end">
+          <button
+            type="button"
+            className="rounded-full bg-accent px-5 py-2 text-sm font-semibold text-slate-900 transition hover:bg-accent/90 disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={() => onImport(name, text)}
+            disabled={!name.trim() || !text.trim()}
+          >
+            Import deck
           </button>
         </div>
       </div>

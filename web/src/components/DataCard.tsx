@@ -10,6 +10,9 @@ export type DataCardProps = {
   isLoaded: boolean;
   onFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onSampleClick?: () => void;
+  onView?: () => void;
+  onImportText?: () => void;
+  viewLabel?: string;
   adornment?: "deck" | "inventory";
   badge?: string;
 };
@@ -52,6 +55,24 @@ export const DataCard = forwardRef<HTMLInputElement, DataCardProps>(function Dat
           >
             <RefreshCw className="h-4 w-4" />
             Load sample
+          </button>
+        ) : null}
+        {props.onImportText ? (
+          <button
+            type="button"
+            className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10"
+            onClick={props.onImportText}
+          >
+            <span>Paste text</span>
+          </button>
+        ) : null}
+        {props.onView && props.isLoaded ? (
+          <button
+            type="button"
+            className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10"
+            onClick={props.onView}
+          >
+            <span>{props.viewLabel || "View"}</span>
           </button>
         ) : null}
       </div>
